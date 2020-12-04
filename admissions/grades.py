@@ -1,13 +1,9 @@
 import numpy as np
 import pandas
 import scipy.interpolate
-import country_converter as coco
 
 import requests
 from html.parser import HTMLParser
-
-cc = coco.CountryConverter()
-
 
 def scrapegradedata(URL="http://gpa.eng.uci.edu/"):
     page = requests.get(URL)
