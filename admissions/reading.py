@@ -34,7 +34,7 @@ def genReadingAssignments(infile, outfile):
         clist = clist[nperreader:]
 
     # check for unassigned
-    if clist:
+    if len(clist) > 0:
         for c in clist:
             r = np.random.choice(readers, size=1)[0]
             while c in out[r]:
@@ -243,22 +243,25 @@ def genRubricSurvey(surveyname, candidates, rubrics, scoreOptions, shareWith=Non
     return link
 
 
-def genRankSurvey(surveyname, candidates, binsize, shareWith=None):
+def genRankSurvey(readername, candidates, binsize, shareWith=None):
     """
-    surveyname (str)
+    readername (str)
     candidates (iterable)
     binsize (int)
     shareWith (str) optional
     """
     # connect and craete survey
     c = cornellQualtrics()
+    surveyname = "Ranking Survey for {}".format(readername)
     surveyId = c.createSurvey(surveyname)
 
     desc = (
+        u"This survey is for: {0}.\n\n"
         u"Rank students into the top 50%-ile bins.  "
-        u"Put exactly {} students in each bin.  "
+        u"Put exactly {1} students in each bin.  "
         u"All uncategorized students will automatically "
-        u"be placed in the bottom 50%-ile.".format(binsize)
+        u"be placed in the bottom 50%-ile. Ordering within a bin "
+        u"does not matter.".format(readername, binsize)
     )
 
     choices = {}
