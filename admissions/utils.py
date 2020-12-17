@@ -15,19 +15,23 @@ class utils:
         rankfile="university_rankings.xlsx",
         aliasfile="university_aliases.xlsx",
         gradefile="grade_data.xlsx",
+        utilfile="utils2021.xlsx",
     ):
 
         self.rankfile = rankfile
         self.aliasfile = aliasfile
         self.gradefile = gradefile
+        self.utilfile = utilfile
 
         self.rankup = False
         self.aliasup = False
         self.gradeup = False
+        self.utilup = False
 
         copyfile(rankfile, rankfile + ".bck")
         copyfile(aliasfile, aliasfile + ".bck")
         copyfile(gradefile, gradefile + ".bck")
+        copyfile(utilfile, utilfile + ".bck")
         self.readFiles()
 
         # generate grade interpolants
@@ -56,6 +60,10 @@ class utils:
         self.aliases = tmp.parse("aliases")
         self.ignore = tmp.parse("ignore")
         tmp.close()
+        tmp = pandas.ExcelFile(self.utilfile)
+        self.renames = tmp.parse("rename")
+        self.schoolmatches = tmp.parse("schools")
+        tmp.close()
 
     def __del__(self):
         self.updateFiles()
@@ -78,6 +86,23 @@ class utils:
             return self.aliases.loc[
                 self.aliases["Alias"] == name, "Standard Name"
             ].values[0]
+
+        if country not in self.lookup["Country"].values:
+            instr = input(
+                "I don't know any schools in {}. [new]/[s]kip ".format(country)
+            )
+            if instr:
+                self.updateIgnores(name, country)
+                return ("skip",)
+            else:
+                newname = input("Official Name: [{}] ".format(name))
+                if not (newname):
+                    newname = name
+                newrank = input("Rank: [200] ")
+                if not (newrank):
+                    newrank = 200
+                self.updateRankings(newname, newrank, country)
+                return newname
 
         # try fuzzy match against main list
         res = process.extractOne(
@@ -162,6 +187,21 @@ class utils:
             ew.save()
             ew.close()
 
+        if self.utilup:
+            renames = self.renames.copy()
+            schoolmatches = self.schoolmatches.copy()
+            ew = pandas.ExcelWriter(self.utilfile, options={"encoding": "utf-8"})
+            renames.to_excel(ew, sheet_name="rename", index=False)
+            schoolmatches.to_excel(ew, sheet_name="schools", index=False)
+            ew.save()
+            ew.close()
+
+        #flush all the update bools
+        self.rankup = False
+        self.aliasup = False
+        self.gradeup = False
+        self.utilup = False
+
     def calc4ptGPA(self, school, country, gpascale, gpa):
         """Convert GPA to 4 point scale"""
 
@@ -235,18 +275,18 @@ class utils:
 
         return self.grades.loc[self.grades.Name == newname, "Interp"].values[0](gpa)
 
-    def assignschools(self, data, schoolmatches, renames):
+    def assignschools(self, data):
         """Determine undergrad and grad institutions for all students
 
         data - main data table
-        schoolmatches - output table
         """
 
         for row in data.itertuples():
-            fullname = "{}, {}".format(row.Last_Name, row.First_Name)
-            if fullname in schoolmatches["Full_Name"].values:
+            fullname = row.Full_Name
+            if fullname in self.schoolmatches["Full_Name"].values:
                 continue
 
+            print("\n")
             print(fullname)
 
             schools = []
@@ -268,7 +308,7 @@ class utils:
                         if res[0] == "skip":
                             continue
                         elif res[0] == "rename":
-                            renames = renames.append(
+                            self.renames = self.renames.append(
                                 pandas.DataFrame(
                                     {
                                         "Full_Name": [fullname],
@@ -278,6 +318,7 @@ class utils:
                                 ),
                                 ignore_index=True,
                             )
+                            self.utilup = True
                             n = res[1]
                     else:
                         n = res
@@ -293,14 +334,20 @@ class utils:
                     )
                     snums.append(j)
 
+            hasgr = False
             if len(schools) == 1:
                 ug = 0
                 gr = None
             else:
                 inds = np.where(["under" in d.lower() for d in degreetypes])[0]
                 if len(inds) != 1:
-                    print(schools)
-                    ug = int(input("Pick undergrad school index (from 0) "))
+                    for kk in range(len(schools)):
+                        print(
+                            "{}: {}, {}, Earned: {}".format(
+                                kk, schools[kk], degreetypes[kk], earneddegs[kk]
+                            )
+                        )
+                    ug = int(input("Pick UNDERgrad school index (from 0) "))
                 else:
                     ug = inds[0]
 
@@ -310,16 +357,25 @@ class utils:
                         for d in degreetypes
                     ]
                 )[0]
-                if len(inds) != 1:
-                    print(schools)
-                    gr = input("Pick grad school index (from 0) or enter for none ")
+                if len(inds) == 0:
+                    pass
+                elif len(inds) > 1:
+                    for kk in range(len(schools)):
+                        print(
+                            "{}: {}, {}, Earned: {}".format(
+                                kk, schools[kk], degreetypes[kk], earneddegs[kk]
+                            )
+                        )
+                    gr = input("Pick GRAD school index (from 0) or enter for none ")
                     if gr:
                         gr = int(gr)
+                        hasgr = True
                 else:
                     gr = inds[0]
+                    hasgr = True
 
-            if gr:
-                schoolmatches = schoolmatches.append(
+            if hasgr:
+                self.schoolmatches = self.schoolmatches.append(
                     pandas.DataFrame(
                         {
                             "Full_Name": [fullname],
@@ -329,8 +385,9 @@ class utils:
                     ),
                     ignore_index=True,
                 )
+                self.utilup = True
             else:
-                schoolmatches = schoolmatches.append(
+                self.schoolmatches = self.schoolmatches.append(
                     pandas.DataFrame(
                         {
                             "Full_Name": [fullname],
@@ -340,55 +397,77 @@ class utils:
                     ),
                     ignore_index=True,
                 )
+                self.utilup = True
 
-        return data, schoolmatches, renames
+        return data
 
-    def readData(self,fname):
-        data = pandas.read_csv(fname,header=[0,1])
+    def readData(self, fname):
+        data = pandas.read_csv(fname, header=[0, 1])
         data.columns = data.columns.droplevel(-1)
-        data = data.drop(columns=['Assigned', 'In Progress', 'Completed', 'Tags','Field Admission Decision'])
+        data = data.drop(
+            columns=[
+                "Assigned",
+                "In Progress",
+                "Completed",
+                "Tags",
+                "Field Admission Decision",
+            ],
+            errors="ignore",
+        )
 
-        #retain only our concentrations
-        #concentrations = np.unique(np.hstack([data['Concentration 1'][data['Concentration 1'].notnull()].unique(),data['Concentration 2'][data['Concentration 2'].notnull()].unique(),data['Concentration 3'][data['Concentration 3'].notnull()].unique()]))
-        #ourconcs = ['Aerodynamics','Aerospace Systems','Dynamics and Control','Dynamics and Space Mechanics','Propulsion']
-        #inds = (data['Concentration 1'] == ourconcs[0]) | (data['Concentration 2'] == ourconcs[0]) | (data['Concentration 3'] == ourconcs[0])
-        #for j in range(1,len(ourconcs)):
+        # retain only our concentrations
+        # concentrations = np.unique(np.hstack([data['Concentration 1'][data['Concentration 1'].notnull()].unique(),data['Concentration 2'][data['Concentration 2'].notnull()].unique(),data['Concentration 3'][data['Concentration 3'].notnull()].unique()]))
+        # ourconcs = ['Aerodynamics','Aerospace Systems','Dynamics and Control','Dynamics and Space Mechanics','Propulsion']
+        # inds = (data['Concentration 1'] == ourconcs[0]) | (data['Concentration 2'] == ourconcs[0]) | (data['Concentration 3'] == ourconcs[0])
+        # for j in range(1,len(ourconcs)):
         #    inds = inds | ((data['Concentration 1'] == ourconcs[j]) | (data['Concentration 2'] == ourconcs[j]) | (data['Concentration 3'] == ourconcs[j]))
         #
-        #data = data.loc[inds]
-        #data = data.reset_index(drop=True)
+        # data = data.loc[inds]
+        # data = data.reset_index(drop=True)
 
-        #make sure that numeric cols remain numeric
-        numcols = ['Verbal GRE (Unofficial)','Quantitative GRE (Unofficial)', 'GRE Analytical Writing GRE (Unofficial)']
-        for j in range(1,4):
+        # make sure that numeric cols remain numeric
+        numcols = [
+            "Verbal GRE (Unofficial)",
+            "Quantitative GRE (Unofficial)",
+            "GRE Analytical Writing GRE (Unofficial)",
+        ]
+        for j in range(1, 4):
             numcols.append("GPA (School {})".format(j))
             numcols.append("GPA Scale (School {})".format(j))
 
         for col in numcols:
             data[col] = data[col].astype(float)
 
-        #add some new columns
-        data['UGrad School'] = None
-        data['UGrad GPA'] = None
-        data['Grad School'] = None
-        data['Grad GPA'] = None
-        data['UGrad GPA 4pt'] = None
-        data['Grad GPA 4pt'] = None
-        data['UGrad GPA Norm'] = None
-        data['Grad GPA Norm'] = None
-        data['UGrad Rank'] = None
-        data['Grad Rank'] = None
-        data['URM'] = None
-        data['Total'] = None
+        # add some new columns
+        data["UGrad School"] = None
+        data["UGrad GPA"] = None
+        data["Grad School"] = None
+        data["Grad GPA"] = None
+        data["UGrad GPA 4pt"] = None
+        data["Grad GPA 4pt"] = None
+        data["UGrad GPA Norm"] = None
+        data["Grad GPA Norm"] = None
+        data["UGrad Rank"] = None
+        data["Grad Rank"] = None
+        data["URM"] = None
+        data["Total"] = None
 
-        #remove all column name spaces and special chars
-        data.columns = data.columns.str.replace(' ', '_')
-        data.columns = data.columns.str.replace('?', '')
-        data.columns = data.columns.str.replace('(', '')
-        data.columns = data.columns.str.replace(')', '')
+        # remove all column name spaces and special chars
+        data.columns = data.columns.str.strip()
+        data.columns = data.columns.str.replace(" ", "_")
+        data.columns = data.columns.str.replace("?", "")
+        data.columns = data.columns.str.replace("(", "")
+        data.columns = data.columns.str.replace(")", "")
+        data.columns = data.columns.str.replace('"', "")
 
-        #add full name col
-        fullname = ["{}, {}".format(row.Last_Name, row.First_Name) for row in data.itertuples()]
-        data['Full_Name'] = fullname
+        # add full name col
+        fullname = [
+            "{}, {}".format(row.Last_Name, row.First_Name) for row in data.itertuples()
+        ]
+        data["Full_Name"] = fullname
+
+        # overwrite all fields as needed
+        for row in self.renames.itertuples():
+            data.loc[data["Full_Name"] == row.Full_Name, row.Field] = row.Value
 
         return data

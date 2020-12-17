@@ -28,7 +28,7 @@ setuptools.setup(
     url="https://github.com/dsavransky/admissions",
     packages=["admissions"],
     install_requires=["numpy", "pandas", "scipy", "country_converter",
-                      "fuzzywuzzy", "requests"],
+                      "fuzzywuzzy", "requests", "openpyxl"],
     classifiers=[
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
