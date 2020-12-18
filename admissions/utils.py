@@ -89,7 +89,9 @@ class utils:
 
         if country not in self.lookup["Country"].values:
             instr = input(
-                "I don't know any schools in {}. [new]/[s]kip ".format(country)
+                "{0}: I don't know any schools in {1}. [new]/[s]kip ".format(
+                    name, country
+                )
             )
             if instr:
                 self.updateIgnores(name, country)
@@ -128,7 +130,7 @@ class utils:
                     newrank = input("Rank: [200] ")
                     if not (newrank):
                         newrank = 200
-                    self.updateRankings(newname, newrank, country)
+                    self.updateRankings(newname, int(newrank), country)
                     if newname != name:
                         self.updateAliases(name, newname)
                     return newname
@@ -196,7 +198,7 @@ class utils:
             ew.save()
             ew.close()
 
-        #flush all the update bools
+        # flush all the update bools
         self.rankup = False
         self.aliasup = False
         self.gradeup = False
