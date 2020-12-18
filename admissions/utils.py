@@ -122,6 +122,12 @@ class utils:
             if instr:
                 if instr == "r":
                     newname = input("Official Name: ")
+                    if (newname not in self.lookup["Name"].values):
+                        print("This is a new school.")
+                        newrank = input("Rank: [200] ")
+                        if not (newrank):
+                            newrank = 200
+                        self.updateRankings(newname, int(newrank), country)
                     return "rename", newname
                 elif instr == "n":
                     newname = input("Official Name: [accept]")
@@ -138,6 +144,9 @@ class utils:
                     self.updateIgnores(name, country)
                     return ("skip",)
                 else:
+                    if (instr not in self.lookup["Name"].values):
+                        print("I don't know the school you just entered.  Trying again.")
+                        return self.matchschool(name, country)
                     self.updateAliases(name, instr)
                     return instr
             else:
