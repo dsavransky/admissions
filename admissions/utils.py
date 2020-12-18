@@ -453,6 +453,9 @@ class utils:
     def readData(self, fname):
         data = pandas.read_csv(fname, header=[0, 1])
         data.columns = data.columns.droplevel(-1)
+        data.drop(data[data['Field Admission Decision'] == "ADMT"].index,inplace=True)
+        data.reset_index(drop=True,inplace=True)
+
         data = data.drop(
             columns=[
                 "Assigned",

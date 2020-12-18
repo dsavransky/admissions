@@ -83,7 +83,14 @@ def expfit(x, a, b, c):
 
 
 def sfit(x, a, b, c):
-    return a / (b + np.exp(c * x))
+    return a / (b + np.exp(-c * x))
+
+
+def sfit2(x, a, b, c):
+    return a + b/ (1 + np.exp(-x/c))
+
+def tanhfit(x, a, b, c):
+    return a + b*np.tanh(x/c)
 
 
 # PCA
