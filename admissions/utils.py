@@ -68,6 +68,15 @@ class utils:
     def __del__(self):
         self.updateFiles()
 
+    def isknownschool(self, name):
+        # try main list
+        if name in self.lookup["Name"].values:
+            return True
+        if name in self.aliases["Alias"].values:
+            return True
+
+        return False
+
     def matchschool(self, name, country):
         # check ignores first
         if (name in self.ignore["Name"].values) and (
@@ -122,7 +131,7 @@ class utils:
             if instr:
                 if instr == "r":
                     newname = input("Official Name: ")
-                    if (newname not in self.lookup["Name"].values):
+                    if newname not in self.lookup["Name"].values:
                         print("This is a new school.")
                         newrank = input("Rank: [200] ")
                         if not (newrank):
@@ -144,8 +153,10 @@ class utils:
                     self.updateIgnores(name, country)
                     return ("skip",)
                 else:
-                    if (instr not in self.lookup["Name"].values):
-                        print("I don't know the school you just entered.  Trying again.")
+                    if instr not in self.lookup["Name"].values:
+                        print(
+                            "I don't know the school you just entered.  Trying again."
+                        )
                         return self.matchschool(name, country)
                     self.updateAliases(name, instr)
                     return instr
@@ -295,7 +306,34 @@ class utils:
         for row in data.itertuples():
             fullname = row.Full_Name
             if fullname in self.schoolmatches["Full_Name"].values:
-                continue
+                redo = False
+                ugj = self.schoolmatches.loc[
+                    self.schoolmatches["Full_Name"] == fullname, "UG_School"
+                ].values[0]
+                if not (
+                    self.isknownschool(
+                        row.__getattribute__("School_Name_{}".format(int(ugj)))
+                    )
+                ):
+                    redo = True
+
+                gj = self.schoolmatches.loc[
+                    self.schoolmatches["Full_Name"] == fullname, "GR_School"
+                ].values[0]
+                if not (np.isnan(gj)):
+                    if not (
+                        self.isknownschool(
+                            row.__getattribute__("School_Name_{}".format(int(gj)))
+                        )
+                    ):
+                        redo = True
+
+                if redo:
+                    self.schoolmatches = self.schoolmatches[
+                        self.schoolmatches["Full_Name"] != fullname
+                    ].reset_index(drop=True)
+                else:
+                    continue
 
             print("\n")
             print(fullname)
@@ -436,19 +474,6 @@ class utils:
         # data = data.loc[inds]
         # data = data.reset_index(drop=True)
 
-        # make sure that numeric cols remain numeric
-        numcols = [
-            "Verbal GRE (Unofficial)",
-            "Quantitative GRE (Unofficial)",
-            "GRE Analytical Writing GRE (Unofficial)",
-        ]
-        for j in range(1, 4):
-            numcols.append("GPA (School {})".format(j))
-            numcols.append("GPA Scale (School {})".format(j))
-
-        for col in numcols:
-            data[col] = data[col].astype(float)
-
         # add some new columns
         data["UGrad School"] = None
         data["UGrad GPA"] = None
@@ -480,5 +505,18 @@ class utils:
         # overwrite all fields as needed
         for row in self.renames.itertuples():
             data.loc[data["Full_Name"] == row.Full_Name, row.Field] = row.Value
+
+        # make sure that numeric cols remain numeric
+        numcols = [
+            "Verbal_GRE_Unofficial",
+            "Quantitative_GRE_Unofficial",
+            "GRE_Analytical_Writing_GRE_Unofficial",
+        ]
+        for j in range(1, 4):
+            numcols.append("GPA_School_{}".format(j))
+            numcols.append("GPA_Scale_School_{}".format(j))
+
+        for col in numcols:
+            data[col] = data[col].astype(float)
 
         return data
