@@ -1,12 +1,12 @@
 import numpy as np
-import re
 import pandas
 import scipy.interpolate
 from scipy.optimize import curve_fit
-import os, glob
+from scipy.stats import norm
 import country_converter as coco
-from fuzzywuzzy import fuzz, process
+from fuzzywuzzy import process
 from shutil import copyfile
+from admissions.rankings import tfit
 
 
 class utils:
@@ -43,7 +43,7 @@ class utils:
         for row in grades.iterrows():
             xgpa = np.array(row[1]["SchoolGPA"].split("/")).astype(float)
             ygpa = np.array(row[1]["4ptGPA"].split("/")).astype(float)
-            if xgpa.min() != 0:
+            if (xgpa.min() != 0) & (ygpa.min() != 0):
                 xgpa = np.hstack([xgpa, 0])
                 ygpa = np.hstack([ygpa, 0])
             interps.append(scipy.interpolate.interp1d(xgpa, ygpa, kind="linear"))
@@ -51,6 +51,13 @@ class utils:
         self.grades = grades
 
         self.cc = coco.CountryConverter()
+
+        # create fit function
+        x = np.array([9, 50])
+        y = np.array([3.3, 3.5])
+        ftrank, _ = curve_fit(tfit, x, y, [-0.5, 2.5])
+
+        self.rankfit = lambda x: tfit(x, ftrank[0], ftrank[1])
 
     def readFiles(self):
         tmp = pandas.ExcelFile(self.rankfile)
@@ -212,6 +219,9 @@ class utils:
         if self.utilup:
             renames = self.renames.copy()
             schoolmatches = self.schoolmatches.copy()
+            schoolmatches = schoolmatches.sort_values(by=["Full_Name"]).reset_index(
+                drop=True
+            )
             ew = pandas.ExcelWriter(self.utilfile, options={"encoding": "utf-8"})
             renames.to_excel(ew, sheet_name="rename", index=False)
             schoolmatches.to_excel(ew, sheet_name="schools", index=False)
@@ -230,25 +240,20 @@ class utils:
         if gpascale == 4.0:
             return gpa
 
-        if gpascale == 4.3:
+        if (gpascale == 4.3) | (gpascale == 4.33) | (gpascale == 4.2):
             if gpa > 4.0:
                 return 4.0
             else:
                 return gpa
 
         # first try to match the school
-        if (
-            (school in self.grades["Name"].values)
-            and (
-                self.grades.loc[self.grades.Name == school, "Country"].values[0]
-                == country
-            )
-            and (
-                self.grades.loc[self.grades.Name == school, "GPAScale"].values[0]
-                == gpascale
-            )
-        ):
-            return self.grades.loc[self.grades.Name == school, "Interp"].values[0](gpa)
+        mtch = (
+            (self.grades.Name == school)
+            & (self.grades.Country == country)
+            & (self.grades.GPAScale == gpascale)
+        )
+        if mtch.any():
+            return self.grades.loc[mtch, "Interp"].values[0](gpa)
 
         # if that doesn't work, lets try to match the country
         if (
@@ -267,33 +272,39 @@ class utils:
                 school, country, gpascale
             )
         )
-        newname = input("New Entry:  [DEFAULT country]/[s] School Name ")
-        if newname:
-            newname = school
-        else:
-            newname = "DEFAULT {}".format(country)
-        xgpastr = input("New Entry GPAs: gpascale/.../min ")
-        ygpastr = input("New Entry 4pt GPAs: 4.0/.../min ")
-        xgpa = np.array(xgpastr.split("/")).astype(float)
-        ygpa = np.array(ygpastr.split("/")).astype(float)
-        if xgpa.min() != 0:
-            xgpa = np.hstack([xgpa, 0])
-            ygpa = np.hstack([ygpa, 0])
+        action = input("What would you like to do? [manual entry]/[n]ew ")
+        if action:
+            newname = input("New Entry:  [DEFAULT country]/[s] School Name ")
+            if newname:
+                newname = school
+            else:
+                newname = "DEFAULT {}".format(country)
+            xgpastr = input("New Entry GPAs: gpascale/.../min ")
+            ygpastr = input("New Entry 4pt GPAs: 4.0/.../min ")
+            xgpa = np.array(xgpastr.split("/")).astype(float)
+            ygpa = np.array(ygpastr.split("/")).astype(float)
+            if (xgpa.min() != 0) & (ygpa.min() != 0):
+                xgpa = np.hstack([xgpa, 0])
+                ygpa = np.hstack([ygpa, 0])
 
-        self.grades = self.grades.append(
-            pandas.DataFrame(
-                {
-                    "Name": [newname],
-                    "Country": [country],
-                    "GPAScale": [gpascale],
-                    "SchoolGPA": [xgpastr],
-                    "4ptGPA": [ygpastr],
-                    "Interp": [scipy.interpolate.interp1d(xgpa, ygpa, kind="linear")],
-                }
-            ),
-            ignore_index=True,
-        )
-        self.gradeup = True
+            self.grades = self.grades.append(
+                pandas.DataFrame(
+                    {
+                        "Name": [newname],
+                        "Country": [country],
+                        "GPAScale": [gpascale],
+                        "SchoolGPA": [xgpastr],
+                        "4ptGPA": [ygpastr],
+                        "Interp": [
+                            scipy.interpolate.interp1d(xgpa, ygpa, kind="linear")
+                        ],
+                    }
+                ),
+                ignore_index=True,
+            )
+            self.gradeup = True
+        else:
+            return None
 
         return self.grades.loc[self.grades.Name == newname, "Interp"].values[0](gpa)
 
@@ -441,20 +452,116 @@ class utils:
                         {
                             "Full_Name": [fullname],
                             "UG_School": [snums[ug]],
-                            "GR_School": [None],
+                            "GR_School": [np.nan],
                         }
                     ),
                     ignore_index=True,
                 )
                 self.utilup = True
 
+    def fillSchoolData(self, data):
+        for row in data.itertuples():
+            fullname = row.Full_Name
+            print(fullname)
+
+            # get ugrad gpa
+            j = int(
+                self.schoolmatches.loc[
+                    self.schoolmatches["Full_Name"] == fullname, "UG_School"
+                ].values[0]
+            )
+            s = row.__getattribute__("School_Name_{}".format(j))
+            country = self.cc.convert(
+                names=row.__getattribute__("School_Country_{}".format(j)),
+                to="name_short",
+            )
+            school = self.matchschool(s, country)
+            gpa = row.__getattribute__("GPA_School_{}".format(j))
+            gpascale = row.__getattribute__("GPA_Scale_School_{}".format(j))
+            country = self.cc.convert(
+                names=row.__getattribute__("School_Country_{}".format(j)),
+                to="name_short",
+            )
+
+            data.at[row.Index, "UGrad_School"] = school
+            data.at[row.Index, "UGrad_GPA"] = gpa
+            newgpa = self.calc4ptGPA(school, country, gpascale, gpa)
+            # check for rename request:
+            if newgpa is None:
+                newgpa = input("GPA: ")
+                newgpascale = input("GPA Scale: ")
+                self.renames = self.renames.append(
+                    pandas.DataFrame(
+                        {
+                            "Full_Name": [fullname, fullname],
+                            "Field": [
+                                "GPA_School_{}".format(j),
+                                "GPA_Scale_School_{}".format(j),
+                            ],
+                            "Value": [float(newgpa), float(newgpascale)],
+                        }
+                    ),
+                    ignore_index=True,
+                )
+                self.utilup = True
+                continue
+
+            data.at[row.Index, "UGrad_GPA_4pt"] = newgpa
+
+            rank = self.lookup.loc[self.lookup["Name"] == school, "Rank"].values[0]
+            medgpa = self.rankfit(rank)
+            uggpa = norm.cdf(2 * (newgpa - medgpa))
+            data.at[row.Index, "UGrad_Rank"] = rank
+            data.at[row.Index, "UGrad_GPA_Norm"] = uggpa
+
+            # get grad school gpa if it exists
+            if (
+                self.schoolmatches.loc[
+                    self.schoolmatches["Full_Name"] == fullname, "GR_School"
+                ]
+                .notnull()
+                .values[0]
+            ):
+                j = int(
+                    self.schoolmatches.loc[
+                        self.schoolmatches["Full_Name"] == fullname, "GR_School"
+                    ].values[0]
+                )
+
+                s = row.__getattribute__("School_Name_{}".format(j))
+                country = self.cc.convert(
+                    names=row.__getattribute__("School_Country_{}".format(j)),
+                    to="name_short",
+                )
+                school = self.matchschool(s, country)
+                data.at[row.Index, "Grad_School"] = school
+                gpa = row.__getattribute__("GPA_School_{}".format(j))
+                if np.isfinite(gpa):
+                    gpascale = row.__getattribute__("GPA_Scale_School_{}".format(j))
+                    country = self.cc.convert(
+                        names=row.__getattribute__("School_Country_{}".format(j)),
+                        to="name_short",
+                    )
+
+                    data.at[row.Index, "Grad_GPA"] = gpa
+                    newgpa = self.calc4ptGPA(school, country, gpascale, gpa)
+                    data.at[row.Index, "Grad_GPA_4pt"] = newgpa
+
+                    rank = self.lookup.loc[
+                        self.lookup["Name"] == school, "Rank"
+                    ].values[0]
+                    medgpa = self.rankfit(rank)
+                    grgpa = norm.cdf(2 * (newgpa - medgpa))
+                    data.at[row.Index, "Grad_Rank"] = rank
+                    data.at[row.Index, "Grad_GPA_Norm"] = grgpa
+
         return data
 
     def readData(self, fname):
         data = pandas.read_csv(fname, header=[0, 1])
         data.columns = data.columns.droplevel(-1)
-        data.drop(data[data['Field Admission Decision'] == "ADMT"].index,inplace=True)
-        data.reset_index(drop=True,inplace=True)
+        data.drop(data[data["Field Admission Decision"] == "ADMT"].index, inplace=True)
+        data.reset_index(drop=True, inplace=True)
 
         data = data.drop(
             columns=[
@@ -514,6 +621,8 @@ class utils:
             "Verbal_GRE_Unofficial",
             "Quantitative_GRE_Unofficial",
             "GRE_Analytical_Writing_GRE_Unofficial",
+            "UGrad_GPA_4pt",
+            "Grad_GPA_4pt",
         ]
         for j in range(1, 4):
             numcols.append("GPA_School_{}".format(j))

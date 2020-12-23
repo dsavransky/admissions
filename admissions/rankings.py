@@ -87,10 +87,19 @@ def sfit(x, a, b, c):
 
 
 def sfit2(x, a, b, c):
-    return a + b/ (1 + np.exp(-x/c))
+    return a + b / (1 + np.exp(-x / c))
+
 
 def tanhfit(x, a, b, c):
-    return a + b*np.tanh(x/c)
+    return a + b * np.tanh(x / c)
+
+
+def tfit(x, l, u):
+    m = (u - l) / 199
+    b = l - m
+    m2 = 0.6 / (np.tanh(u) - np.tanh(l))
+    b2 = 3.8 - m2 * np.tanh(u)
+    return np.tanh(x * m + b) * m2 + b2
 
 
 # PCA
