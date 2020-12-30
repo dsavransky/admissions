@@ -35,7 +35,7 @@ class utils:
         self.readFiles()
 
         # generate grade interpolants
-        tmp = pandas.ExcelFile(self.gradefile)
+        tmp = pandas.ExcelFile(self.gradefile, engine="openpyxl")
         grades = tmp.parse("grades")
         tmp.close()
 
@@ -60,14 +60,14 @@ class utils:
         self.rankfit = lambda x: tfit(x, ftrank[0], ftrank[1])
 
     def readFiles(self):
-        tmp = pandas.ExcelFile(self.rankfile)
+        tmp = pandas.ExcelFile(self.rankfile, engine="openpyxl")
         self.lookup = tmp.parse("lookup")
         tmp.close()
-        tmp = pandas.ExcelFile(self.aliasfile)
+        tmp = pandas.ExcelFile(self.aliasfile, engine="openpyxl")
         self.aliases = tmp.parse("aliases")
         self.ignore = tmp.parse("ignore")
         tmp.close()
-        tmp = pandas.ExcelFile(self.utilfile)
+        tmp = pandas.ExcelFile(self.utilfile, engine="openpyxl")
         self.renames = tmp.parse("rename")
         self.schoolmatches = tmp.parse("schools")
         tmp.close()

@@ -11,7 +11,7 @@ intlgpas = gradedat['intlgpas']
 usgpas = gradedat['usgpas']
 
 # grab our university list
-tmp = pandas.ExcelFile('university_rankings.xlsx')
+tmp = pandas.ExcelFile('university_rankings.xlsx',engine='openpyxl')
 lookup = tmp.parse('lookup')
 tmp.close()
 lnames = lookup['Name'].values
@@ -57,7 +57,7 @@ names[names == 'DEFAULT Argetina'] = 'Argentina'
 names[defaults] = np.array(['DEFAULT '+c for c in cc.convert(names = list(names[defaults]), to = 'name_short')])
 
 #load known aliases and apply
-tmp = pandas.ExcelFile('grades_aliases.xlsx')
+tmp = pandas.ExcelFile('grades_aliases.xlsx',engine='openpyxl')
 aliases = tmp.parse('aliases')
 tmp.close()
 

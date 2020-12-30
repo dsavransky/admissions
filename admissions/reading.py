@@ -9,7 +9,7 @@ def genReadingAssignments(infile, outfile):
     # infile must be xlsx with two sheets (Readers & Canddiates)
 
     # grab all input data
-    tmp = pandas.ExcelFile(infile)
+    tmp = pandas.ExcelFile(infile, engine="openpyxl")
     readers = tmp.parse("Readers")
     candidates = tmp.parse("Candidates")
     tmp.close()

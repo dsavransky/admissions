@@ -110,7 +110,7 @@ allcountries = np.hstack((['United States']*len(usnames),worldcountries))
 wnames, wranks, wcountries = genthelist()
 
 #grab existing alias list
-tmp = pandas.ExcelFile('university_aliases.xlsx')
+tmp = pandas.ExcelFile('university_aliases.xlsx', engine='openpyxl')
 aliases = tmp.parse('aliases')
 tmp.close()
 

@@ -5,6 +5,7 @@ import scipy.interpolate
 import requests
 from html.parser import HTMLParser
 
+
 def scrapegradedata(URL="http://gpa.eng.uci.edu/"):
     page = requests.get(URL)
 
@@ -70,7 +71,7 @@ def scrapegradedata(URL="http://gpa.eng.uci.edu/"):
 
 def gengradedicts(grade_data="grade_data.xlsx"):
     # generate school and country grade dictionaries
-    tmp = pandas.ExcelFile(grade_data)
+    tmp = pandas.ExcelFile(grade_data, engine="openpyxl")
     grades = tmp.parse("grades")
     tmp.close()
 
