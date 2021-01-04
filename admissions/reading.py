@@ -295,7 +295,7 @@ def genRankSurvey(readername, candidates, binsize, shareWith=None):
         },
         "GradingData": [],
         "Language": [],
-        "NextChoiceId": 31,
+        "NextChoiceId": len(choices) + 1,
         "NextAnswerId": 6,
         "Groups": ["Top 10%", "Top 20%", "Top 30%", "Top 40%", "Top 50%"],
         "NumberOfGroups": 5,
@@ -312,6 +312,70 @@ def genRankSurvey(readername, candidates, binsize, shareWith=None):
 
     link = "https://cornell.qualtrics.com/jfe/form/%s" % surveyId
     return link
+
+
+def getRankSurveyRes(assignments, outfile):
+    c = cornellQualtrics()
+
+    outdict = {}
+    for readername in assignments.columns:
+        surveyname = "Ranking Survey for {}".format(readername)
+        surveyId = c.getSurveyId(surveyname)
+        tmpdir = c.exportSurvey(surveyId)
+        tmpfile = os.path.join(tmpdir, surveyname + ".csv")
+        assert os.path.isfile(tmpfile), "Survey results not where expected."
+        res = pandas.read_csv(tmpfile, header=[0, 1, 2])
+
+        if len(res) == 0:
+            continue
+
+        allnames = np.array([])
+        for j in range(5):
+            gcolinds = np.array(
+                ["Q1_{}_GROUP".format(j) in c for c in res.columns.get_level_values(0)]
+            )
+            gcols = res.columns.get_level_values(0)[gcolinds]
+            names = res[gcols].values
+            names = names[names == names]
+            assert len(names) == 3
+            allnames = np.hstack((allnames, names))
+            for n in names:
+                if n in outdict:
+                    outdict[n] += ((j + 1) * 10,)
+                else:
+                    outdict[n] = ((j + 1) * 10,)
+        unranked = np.array(list(set(assignments[readername].values) - set(allnames)))
+        unranked = unranked[unranked != "nan"]
+        for n in unranked:
+            if n in outdict:
+                outdict[n] += (100,)
+            else:
+                outdict[n] = (100,)
+
+    # build output
+    outnames = []
+    outrank1 = []
+    outrank2 = []
+    for key, val in outdict.items():
+        outnames.append(key.split(", "))
+        outrank1.append(val[0])
+        if len(val) == 2:
+            outrank2.append(val[1])
+        else:
+            outrank2.append(np.nan)
+    outnames = np.array(outnames)
+    out = pandas.DataFrame(
+        {
+            "First Name": outnames[:, 0],
+            "Lat Name": outnames[:, 1],
+            "Rank 1": outrank1,
+            "Rank 2": outrank2,
+        }
+    )
+    ew = pandas.ExcelWriter(outfile, options={"encoding": "utf-8"})
+    out.to_excel(ew, sheet_name="Ranks", index=False)
+    ew.save()
+    ew.close()
 
 
 def genRankDragSurvey(surveyname, candidates, shareWith=None):
