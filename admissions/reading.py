@@ -9,13 +9,17 @@ def genReadingAssignments(infile, outfile):
     # infile must be xlsx with two sheets (Readers & Canddiates)
 
     # grab all input data
-    tmp = pandas.ExcelFile(infile, engine="openpyxl")
-    readers = tmp.parse("Readers")
-    candidates = tmp.parse("Candidates")
-    tmp.close()
+    if isinstance(infile, str):
+        tmp = pandas.ExcelFile(infile, engine="openpyxl")
+        readers = tmp.parse("Readers")
+        candidates = tmp.parse("Candidates")
+        tmp.close()
 
-    readers = readers["Reader Names"].values
-    candidates = candidates["Candidate Names"].values
+        readers = readers["Reader Names"].values
+        candidates = candidates["Candidate Names"].values
+    else:
+        readers = infile[0]
+        candidates = infile[1]
 
     # Each person needs to be read by 2 readers
     nperreader = int(np.round(len(candidates) * 2 / len(readers)))
@@ -106,6 +110,25 @@ def genRubricSurvey(surveyname, candidates, rubrics, scoreOptions, shareWith=Non
     }
     qid1 = c.addSurveyQuestion(surveyId, questionDef)
 
+    questionDef = {
+        'QuestionText': surveyname,
+        'DefaultChoices': False,
+        'DataExportTag': 'Q0',
+        'QuestionType': 'DB',
+        'Selector': 'TB',
+        'Configuration': {'QuestionDescriptionOption': 'UseText'},
+        'QuestionDescription': surveyname,
+        'ChoiceOrder': [],
+        'Validation': {'Settings': {'Type': 'None'}},
+        'GradingData': [],
+        'Language': [],
+        'NextChoiceId': 4,
+        'NextAnswerId': 1,
+        'QuestionID': 'QID0',
+        'QuestionText_Unsafe': surveyname}
+    _ = c.addSurveyQuestion(surveyId, questionDef)
+
+
     # rubric multiple choice
     choices = {}
     for j, choice in enumerate(scoreOptions):
@@ -132,11 +155,31 @@ def genRubricSurvey(surveyname, candidates, rubrics, scoreOptions, shareWith=Non
                 }
             },
             "Language": [],
-            "QuestionID": "QID%d" % (j + 3),
+            "QuestionID": "QID%d" % (j + 1),
             "DataVisibility": {"Private": False, "Hidden": False},
             "QuestionText_Unsafe": desc,
         }
         c.addSurveyQuestion(surveyId, questionDef)
+
+    questionDef = {
+        'QuestionText': 'Comments',
+        'DefaultChoices': False,
+        'DataExportTag': "Q%d" % (len(rubrics) + 2),
+        'QuestionType': 'TE',
+        'Selector': 'SL',
+        'Configuration': {'QuestionDescriptionOption': 'UseText'},
+        'QuestionDescription': 'Comments',
+        'Validation': {'Settings': {'ForceResponse': 'OFF',
+            'ForceResponseType': 'ON',
+            'Type': 'None'}},
+        'GradingData': [],
+        'Language': [],
+        'NextChoiceId': 4,
+        'NextAnswerId': 1,
+        'SearchSource': {'AllowFreeResponse': 'false'},
+        'QuestionID': "QID%d" % (len(rubrics) + 2),
+        'QuestionText_Unsafe': 'Comments'}
+    _ = c.addSurveyQuestion(surveyId, questionDef)
 
     # generate quotas
     quotaGroupName = "q1quotas"
@@ -335,7 +378,7 @@ def getRankSurveyRes(assignments, outfile):
                 ["Q1_{}_GROUP".format(j) in c for c in res.columns.get_level_values(0)]
             )
             gcols = res.columns.get_level_values(0)[gcolinds]
-            names = res[gcols].values
+            names = res[gcols].iloc[-1].values
             names = names[names == names]
             assert len(names) == 3
             allnames = np.hstack((allnames, names))
