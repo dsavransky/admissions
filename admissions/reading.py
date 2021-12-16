@@ -4,7 +4,7 @@ from cornellGrading import cornellQualtrics
 import os
 
 
-def genReadingAssignments(infile, outfile):
+def genReadingAssignments(infile, outfile, nreaders = 2):
     # generate reading assignments
     # infile must be xlsx with two sheets (Readers & Canddiates)
 
@@ -16,13 +16,13 @@ def genReadingAssignments(infile, outfile):
         tmp.close()
 
         readers = readers["Reader Names"].values
-        candidates = candidates["Candidate Names"].values
+        candidates = candidates["Candidate Names"].values.astype(str)
     else:
         readers = infile[0]
         candidates = infile[1]
 
     # Each person needs to be read by 2 readers
-    nperreader = int(np.round(len(candidates) * 2 / len(readers)))
+    nperreader = int(np.round(len(candidates) * nreaders / len(readers)))
 
     # shuffle candidates and split by readers
     clist = np.hstack((candidates.copy(), candidates.copy()))
@@ -55,18 +55,15 @@ def genReadingAssignments(infile, outfile):
         np.unique(asslist) == np.sort(candidates)
     ), "Not all candidates assigned."
     for c in candidates:
-        assert np.where(asslist == c)[0].size == 2, "{} not assigned twice.".format(c)
+        assert np.where(asslist == c)[0].size == nreaders, "{} not assigned twice.".format(c)
 
     # write assignemnts out to disk
     outdf = pandas.DataFrame()
     for key, val in out.items():
         outdf = pandas.concat([outdf, pandas.DataFrame({key: val})], axis=1)
 
-    ew = pandas.ExcelWriter(outfile, options={"encoding": "utf-8"})
-    outdf.to_excel(ew, sheet_name="Assignments", index=False)
-    ew.save()
-    ew.close()
-
+    with pandas.ExcelWriter(outfile) as writer:
+        outdf.to_excel(writer,sheet_name="Assignments",index=False)
 
 def genRubricSurvey(surveyname, candidates, rubrics, scoreOptions, shareWith=None):
     """
@@ -286,16 +283,19 @@ def genRubricSurvey(surveyname, candidates, rubrics, scoreOptions, shareWith=Non
     return link
 
 
-def genRankSurvey(readername, candidates, binsize, shareWith=None):
+def genRankSurvey(readername, candidates, binsize, surveyBaseName=None, shareWith=None):
     """
     readername (str)
     candidates (iterable)
     binsize (int)
     shareWith (str) optional
+    surveyBaseName (str) optional
     """
     # connect and craete survey
     c = cornellQualtrics()
     surveyname = "Ranking Survey for {}".format(readername)
+    if surveyBaseName:
+        surveyname = "{} {}".format(surveyBaseName, surveyname)
     surveyId = c.createSurvey(surveyname)
 
     desc = (
@@ -415,10 +415,8 @@ def getRankSurveyRes(assignments, outfile):
             "Rank 2": outrank2,
         }
     )
-    ew = pandas.ExcelWriter(outfile, options={"encoding": "utf-8"})
-    out.to_excel(ew, sheet_name="Ranks", index=False)
-    ew.save()
-    ew.close()
+    with pandas.ExcelWriter(outfile) as ew:
+        out.to_excel(ew, sheet_name="Ranks", index=False)
 
 
 def genRankDragSurvey(surveyname, candidates, shareWith=None):
@@ -502,7 +500,6 @@ def binRubricSurveyResults(surveyname, outfile):
     rawscores = res[quescols].values
 
     out = pandas.DataFrame({"Candidate": names, "Bin": bins})
-    ew = pandas.ExcelWriter(outfile, options={"encoding": "utf-8"})
     out2 = pandas.DataFrame(
         {
             "Candidate": names,
@@ -513,7 +510,8 @@ def binRubricSurveyResults(surveyname, outfile):
             "s5": rawscores[:, 4],
         }
     )
-    out.to_excel(ew, sheet_name="Reader A Scores", index=False)
-    out2.to_excel(ew, sheet_name="Reader A Raw Scores", index=False)
-    ew.save()
-    ew.close()
+
+    with pandas.ExcelWriter(outfile) as ew:
+        out.to_excel(ew, sheet_name="Reader A Scores", index=False)
+        out2.to_excel(ew, sheet_name="Reader A Raw Scores", index=False)
+

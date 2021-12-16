@@ -12,10 +12,10 @@ from admissions.rankings import tfit
 class utils:
     def __init__(
         self,
+        utilfile,
         rankfile="university_rankings.xlsx",
         aliasfile="university_aliases.xlsx",
         gradefile="grade_data.xlsx",
-        utilfile="utils2021.xlsx",
     ):
 
         self.rankfile = rankfile
@@ -84,7 +84,7 @@ class utils:
 
         return False
 
-    def matchschool(self, name, country):
+    def matchschool(self, name, country, city=None):
         # check ignores first
         if (name in self.ignore["Name"].values) and (
             self.ignore.loc[self.ignore.Name == name, "Country"].values[0] == country
@@ -130,11 +130,17 @@ class utils:
             self.updateAliases(name, res[0])
             return res[0]
         else:
-            instr = input(
-                "I think {} in {} is {}. [accept]/enter alias/[r]ename/[n]ew/[s]kip ".format(
+            if city:
+                qstr = "I think {} in {}, {} is {}. [accept]/enter alias/[r]ename/[n]ew/[s]kip ".format(
+                    name, city, country, res[0]
+                )
+
+            else:
+                qstr = "I think {} in {} is {}. [accept]/enter alias/[r]ename/[n]ew/[s]kip ".format(
                     name, country, res[0]
                 )
-            )
+
+            instr = input(qstr)
             if instr:
                 if instr == "r":
                     newname = input("Official Name: ")
@@ -164,7 +170,7 @@ class utils:
                         print(
                             "I don't know the school you just entered.  Trying again."
                         )
-                        return self.matchschool(name, country)
+                        return self.matchschool(name, country, city=city)
                     self.updateAliases(name, instr)
                     return instr
             else:
@@ -196,25 +202,19 @@ class utils:
     def updateFiles(self):
 
         if self.rankup:
-            ew = pandas.ExcelWriter(self.rankfile, options={"encoding": "utf-8"})
-            self.lookup.to_excel(ew, sheet_name="lookup", index=False)
-            ew.save()
-            ew.close()
+            with pandas.ExcelWriter(self.rankfile) as ew:
+                self.lookup.to_excel(ew, sheet_name="lookup", index=False)
 
         if self.aliasup:
-            ew = pandas.ExcelWriter(self.aliasfile, options={"encoding": "utf-8"})
-            self.aliases.to_excel(ew, sheet_name="aliases", index=False)
-            self.ignore.to_excel(ew, sheet_name="ignore", index=False)
-            ew.save()
-            ew.close()
+            with pandas.ExcelWriter(self.aliasfile) as ew:
+                self.aliases.to_excel(ew, sheet_name="aliases", index=False)
+                self.ignore.to_excel(ew, sheet_name="ignore", index=False)
 
         if self.gradeup:
             grades = self.grades.copy()
             grades = grades.drop(["Interp"], axis=1)
-            ew = pandas.ExcelWriter(self.gradefile, options={"encoding": "utf-8"})
-            grades.to_excel(ew, sheet_name="grades", index=False)
-            ew.save()
-            ew.close()
+            with pandas.ExcelWriter(self.gradefile) as ew:
+                grades.to_excel(ew, sheet_name="grades", index=False)
 
         if self.utilup:
             renames = self.renames.copy()
@@ -222,11 +222,9 @@ class utils:
             schoolmatches = schoolmatches.sort_values(by=["Full_Name"]).reset_index(
                 drop=True
             )
-            ew = pandas.ExcelWriter(self.utilfile, options={"encoding": "utf-8"})
-            renames.to_excel(ew, sheet_name="rename", index=False)
-            schoolmatches.to_excel(ew, sheet_name="schools", index=False)
-            ew.save()
-            ew.close()
+            with pandas.ExcelWriter(self.utilfile) as ew:
+                renames.to_excel(ew, sheet_name="rename", index=False)
+                schoolmatches.to_excel(ew, sheet_name="schools", index=False)
 
         # flush all the update bools
         self.rankup = False
@@ -353,6 +351,7 @@ class utils:
             degreetypes = []
             countries = []
             earneddegs = []
+            gpas = []
             snums = []
 
             for j in range(1, 4):
@@ -362,7 +361,8 @@ class utils:
                         names=row.__getattribute__("School_Country_{}".format(j)),
                         to="name_short",
                     )
-                    res = self.matchschool(s, country)
+                    c = row.__getattribute__("School_City_{}".format(j))
+                    res = self.matchschool(s, country, city=c)
 
                     if isinstance(res, tuple):
                         if res[0] == "skip":
@@ -392,6 +392,7 @@ class utils:
                     earneddegs.append(
                         row.__getattribute__("Earned_a_degree_School_{}".format(j))
                     )
+                    gpas.append(row.__getattribute__("GPA_School_{}".format(j)))
                     snums.append(j)
 
             hasgr = False
@@ -403,11 +404,22 @@ class utils:
                 if len(inds) != 1:
                     for kk in range(len(schools)):
                         print(
-                            "{}: {}, {}, Earned: {}".format(
-                                kk, schools[kk], degreetypes[kk], earneddegs[kk]
+                            "{}: {}, {}, Earned: {}, GPA:{}".format(
+                                kk,
+                                schools[kk],
+                                degreetypes[kk],
+                                earneddegs[kk],
+                                gpas[kk],
                             )
                         )
-                    ug = int(input("Pick UNDERgrad school index (from 0) "))
+                    waitingForResponse = True
+                    while waitingForResponse:
+                        try:
+                            ug = int(input("Pick UNDERgrad school index (from 0) "))
+                            assert ug in inds
+                            waitingForResponse = False
+                        except (ValueError, AssertionError):
+                            print("I need a valid integer from the list.")
                 else:
                     ug = inds[0]
 
@@ -422,8 +434,12 @@ class utils:
                 elif len(inds) > 1:
                     for kk in range(len(schools)):
                         print(
-                            "{}: {}, {}, Earned: {}".format(
-                                kk, schools[kk], degreetypes[kk], earneddegs[kk]
+                            "{}: {}, {}, Earned: {}, GPA:{}".format(
+                                kk,
+                                schools[kk],
+                                degreetypes[kk],
+                                earneddegs[kk],
+                                gpas[kk],
                             )
                         )
                     gr = input("Pick GRAD school index (from 0) or enter for none ")
@@ -629,6 +645,7 @@ class utils:
             numcols.append("GPA_Scale_School_{}".format(j))
 
         for col in numcols:
-            data[col] = data[col].astype(float)
+            if col in data:
+                data[col] = data[col].astype(float)
 
         return data
