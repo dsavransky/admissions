@@ -555,24 +555,43 @@ class utils:
                 school = self.matchschool(s, country)
                 data.at[row.Index, "Grad_School"] = school
                 gpa = row.__getattribute__("GPA_School_{}".format(j))
-                if np.isfinite(gpa):
-                    gpascale = row.__getattribute__("GPA_Scale_School_{}".format(j))
-                    country = self.cc.convert(
-                        names=row.__getattribute__("School_Country_{}".format(j)),
-                        to="name_short",
+                gpascale = row.__getattribute__("GPA_Scale_School_{}".format(j))
+                country = self.cc.convert(
+                    names=row.__getattribute__("School_Country_{}".format(j)),
+                    to="name_short",
+                )
+
+                data.at[row.Index, "Grad_GPA"] = gpa
+                newgpa = self.calc4ptGPA(school, country, gpascale, gpa)
+                # check for rename request:
+                if newgpa is None:
+                    newgpa = input("GPA: ")
+                    newgpascale = input("GPA Scale: ")
+                    self.renames = self.renames.append(
+                        pandas.DataFrame(
+                            {
+                                "Full_Name": [fullname, fullname],
+                                "Field": [
+                                    "GPA_School_{}".format(j),
+                                    "GPA_Scale_School_{}".format(j),
+                                ],
+                                "Value": [float(newgpa), float(newgpascale)],
+                            }
+                        ),
+                        ignore_index=True,
                     )
+                    self.utilup = True
+                    continue
 
-                    data.at[row.Index, "Grad_GPA"] = gpa
-                    newgpa = self.calc4ptGPA(school, country, gpascale, gpa)
-                    data.at[row.Index, "Grad_GPA_4pt"] = newgpa
+                data.at[row.Index, "Grad_GPA_4pt"] = newgpa
 
-                    rank = self.lookup.loc[
-                        self.lookup["Name"] == school, "Rank"
-                    ].values[0]
-                    medgpa = self.rankfit(rank)
-                    grgpa = norm.cdf(2 * (newgpa - medgpa))
-                    data.at[row.Index, "Grad_Rank"] = rank
-                    data.at[row.Index, "Grad_GPA_Norm"] = grgpa
+                rank = self.lookup.loc[
+                    self.lookup["Name"] == school, "Rank"
+                ].values[0]
+                medgpa = self.rankfit(rank)
+                grgpa = norm.cdf(2 * (newgpa - medgpa))
+                data.at[row.Index, "Grad_Rank"] = rank
+                data.at[row.Index, "Grad_GPA_Norm"] = grgpa
 
         return data
 
