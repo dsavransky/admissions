@@ -9,7 +9,7 @@ import re
 import numpy as np
 
 
-def scrapePDFs(fullnames, profs):
+def scrapePDFs(fullnames, profs, facconsulted):
     files = glob.glob("Candidates/*.pdf")
     havefiles = [",".join(os.path.split(f)[1].split("_")[:2]) for f in files]
     needfiles = [re.sub(r"[\s']", "", n) for n in fullnames]
@@ -27,8 +27,14 @@ def scrapePDFs(fullnames, profs):
     trans = str.maketrans(
         string.punctuation + "’\n", " " * (len(string.punctuation) + 2)
     )
-    for i, fname in enumerate(files):
-        print("%d/%d: %s" % (i, len(files), fname))
+
+    profstrans = np.array([" {} ".format(prof.lower().translate(trans)) for prof in profs])
+
+    facconsulted = facconsulted.astype(str)
+    facconsulted[facconsulted == 'nan'] = ''
+
+    for ii, fname in enumerate(files):
+        print("%d/%d: %s" % (ii, len(files), fname))
 
         rsrcmgr = PDFResourceManager()
         outfp = io.StringIO("")
@@ -47,13 +53,13 @@ def scrapePDFs(fullnames, profs):
         txt = outfp.getvalue()
         device.close()
         outfp.close()
+        txt = txt+" "+facconsulted[ii]+" "
 
         tmp = []
-        for prof in profs:
-            if " " + prof.lower().translate(trans) + " " in txt.lower().translate(
-                trans
-            ):
-                tmp.append(prof)
-        out[i] = ", ".join(tmp)
+        for jj,prof in enumerate(profstrans):
+            if prof in txt.lower().translate(trans):
+                tmp.append(profs[jj])
+
+        out[ii] = ", ".join(tmp)
 
     return out

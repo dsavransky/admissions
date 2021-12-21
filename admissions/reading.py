@@ -4,7 +4,7 @@ from cornellGrading import cornellQualtrics
 import os
 
 
-def genReadingAssignments(infile, outfile, nreaders = 2):
+def genReadingAssignments(infile, outfile, nreaders=2):
     # generate reading assignments
     # infile must be xlsx with two sheets (Readers & Canddiates)
 
@@ -55,7 +55,9 @@ def genReadingAssignments(infile, outfile, nreaders = 2):
         np.unique(asslist) == np.sort(candidates)
     ), "Not all candidates assigned."
     for c in candidates:
-        assert np.where(asslist == c)[0].size == nreaders, "{} not assigned twice.".format(c)
+        assert (
+            np.where(asslist == c)[0].size == nreaders
+        ), "{} not assigned twice.".format(c)
 
     # write assignemnts out to disk
     outdf = pandas.DataFrame()
@@ -63,7 +65,78 @@ def genReadingAssignments(infile, outfile, nreaders = 2):
         outdf = pandas.concat([outdf, pandas.DataFrame({key: val})], axis=1)
 
     with pandas.ExcelWriter(outfile) as writer:
-        outdf.to_excel(writer,sheet_name="Assignments",index=False)
+        outdf.to_excel(writer, sheet_name="Assignments", index=False)
+
+
+def genReadingAssignmentsConcs(readers, data):
+    """
+    readers (pandas dataframe)
+    data (pandas dataframe)
+    """
+
+    from ortools.sat.python import cp_model
+
+    # lets build a reward matrix
+    rewards = {}
+    for r in readers.index:
+        print(r)
+        for c in data["Full_Name"]:
+            tmp = data.loc[
+                data["Full_Name"] == c, ["Concentration_1", "Concentration_2"]
+            ].values.squeeze()
+            tmp = tmp[pandas.notnull(tmp)]
+            tmp = tmp[tmp != "Undecided"]
+            tmp = tmp[tmp != "Human Computer Interaction"]
+            rewards[(r, c)] = readers.loc[r, tmp].sum()
+
+    model = cp_model.CpModel()
+
+    # all candidate/reader combinations
+    assignments = {}
+    for r in readers.index:
+        for c in data["Full_Name"]:
+            assignments[(r, c)] = model.NewBoolVar("{}_{}".format(r, c))
+
+    # every candidate gets two readers
+    for c in data["Full_Name"]:
+        model.Add(sum(assignments[(r, c)] for r in readers.index) == 2)
+
+    # Try to distribute assignments evenly
+    min_candidates_per_reader = 2 * len(data) // len(readers.index)
+    if min_candidates_per_reader * len(readers.index) < 2 * len(data):
+        max_candidates_per_reader = min_candidates_per_reader + 1
+    else:
+        max_candidates_per_reader = min_candidates_per_reader
+
+    for r in readers.index:
+        num_reads = []
+        for c in data["Full_Name"]:
+            num_reads.append(assignments[(r, c)])
+        model.Add(min_candidates_per_reader <= sum(num_reads))
+        model.Add(sum(num_reads) <= max_candidates_per_reader)
+
+    # Objective function based on rewards
+    model.Maximize(
+        sum(
+            rewards[(r, c)] * assignments[(r, c)]
+            for r in readers.index
+            for c in data["Full_Name"]
+        )
+    )
+
+    solver = cp_model.CpSolver()
+    status = solver.Solve(model)
+
+    res = np.zeros((len(readers.index), len(data["Full_Name"])))
+    rewards2 = np.zeros((len(readers.index), len(data["Full_Name"])))
+
+    for jj, r in enumerate(readers.index):
+        for kk, c in enumerate(data["Full_Name"]):
+            res[jj, kk] = solver.Value(assignments[(r, c)])
+            rewards2[jj, kk] = rewards[(r, c)]
+
+    return res, rewards2
+
 
 def genRubricSurvey(surveyname, candidates, rubrics, scoreOptions, shareWith=None):
     """
@@ -108,23 +181,23 @@ def genRubricSurvey(surveyname, candidates, rubrics, scoreOptions, shareWith=Non
     qid1 = c.addSurveyQuestion(surveyId, questionDef)
 
     questionDef = {
-        'QuestionText': surveyname,
-        'DefaultChoices': False,
-        'DataExportTag': 'Q0',
-        'QuestionType': 'DB',
-        'Selector': 'TB',
-        'Configuration': {'QuestionDescriptionOption': 'UseText'},
-        'QuestionDescription': surveyname,
-        'ChoiceOrder': [],
-        'Validation': {'Settings': {'Type': 'None'}},
-        'GradingData': [],
-        'Language': [],
-        'NextChoiceId': 4,
-        'NextAnswerId': 1,
-        'QuestionID': 'QID0',
-        'QuestionText_Unsafe': surveyname}
+        "QuestionText": surveyname,
+        "DefaultChoices": False,
+        "DataExportTag": "Q0",
+        "QuestionType": "DB",
+        "Selector": "TB",
+        "Configuration": {"QuestionDescriptionOption": "UseText"},
+        "QuestionDescription": surveyname,
+        "ChoiceOrder": [],
+        "Validation": {"Settings": {"Type": "None"}},
+        "GradingData": [],
+        "Language": [],
+        "NextChoiceId": 4,
+        "NextAnswerId": 1,
+        "QuestionID": "QID0",
+        "QuestionText_Unsafe": surveyname,
+    }
     _ = c.addSurveyQuestion(surveyId, questionDef)
-
 
     # rubric multiple choice
     choices = {}
@@ -159,23 +232,28 @@ def genRubricSurvey(surveyname, candidates, rubrics, scoreOptions, shareWith=Non
         c.addSurveyQuestion(surveyId, questionDef)
 
     questionDef = {
-        'QuestionText': 'Comments',
-        'DefaultChoices': False,
-        'DataExportTag': "Q%d" % (len(rubrics) + 2),
-        'QuestionType': 'TE',
-        'Selector': 'SL',
-        'Configuration': {'QuestionDescriptionOption': 'UseText'},
-        'QuestionDescription': 'Comments',
-        'Validation': {'Settings': {'ForceResponse': 'OFF',
-            'ForceResponseType': 'ON',
-            'Type': 'None'}},
-        'GradingData': [],
-        'Language': [],
-        'NextChoiceId': 4,
-        'NextAnswerId': 1,
-        'SearchSource': {'AllowFreeResponse': 'false'},
-        'QuestionID': "QID%d" % (len(rubrics) + 2),
-        'QuestionText_Unsafe': 'Comments'}
+        "QuestionText": "Comments",
+        "DefaultChoices": False,
+        "DataExportTag": "Q%d" % (len(rubrics) + 2),
+        "QuestionType": "TE",
+        "Selector": "SL",
+        "Configuration": {"QuestionDescriptionOption": "UseText"},
+        "QuestionDescription": "Comments",
+        "Validation": {
+            "Settings": {
+                "ForceResponse": "OFF",
+                "ForceResponseType": "ON",
+                "Type": "None",
+            }
+        },
+        "GradingData": [],
+        "Language": [],
+        "NextChoiceId": 4,
+        "NextAnswerId": 1,
+        "SearchSource": {"AllowFreeResponse": "false"},
+        "QuestionID": "QID%d" % (len(rubrics) + 2),
+        "QuestionText_Unsafe": "Comments",
+    }
     _ = c.addSurveyQuestion(surveyId, questionDef)
 
     # generate quotas
@@ -514,4 +592,3 @@ def binRubricSurveyResults(surveyname, outfile):
     with pandas.ExcelWriter(outfile) as ew:
         out.to_excel(ew, sheet_name="Reader A Scores", index=False)
         out2.to_excel(ew, sheet_name="Reader A Raw Scores", index=False)
-

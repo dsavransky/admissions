@@ -416,7 +416,7 @@ class utils:
                     while waitingForResponse:
                         try:
                             ug = int(input("Pick UNDERgrad school index (from 0) "))
-                            assert ug in inds
+                            assert ug in range(len(schools))
                             waitingForResponse = False
                         except (ValueError, AssertionError):
                             print("I need a valid integer from the list.")
@@ -425,10 +425,13 @@ class utils:
 
                 inds = np.where(
                     [
-                        ("under" not in d.lower()) | ("combined" in d.lower())
+                        (("under" not in d.lower()) | ("combined" in d.lower()))
+                        & (d != "")
                         for d in degreetypes
                     ]
                 )[0]
+                # throw away any matches of ugrad institution
+                inds[inds != ug]
                 if len(inds) == 0:
                     pass
                 elif len(inds) > 1:
@@ -586,19 +589,16 @@ class utils:
                 "Completed",
                 "Tags",
                 "Field Admission Decision",
+                "Admit Term (requested)",
+                "Admit Term (offered)",
+                "Application Date Submitted",
+                "Application Status",
+                "Applicant Decision",
+                "CollegeNET ID",
+                "Admit Program (offered)"
             ],
             errors="ignore",
         )
-
-        # retain only our concentrations
-        # concentrations = np.unique(np.hstack([data['Concentration 1'][data['Concentration 1'].notnull()].unique(),data['Concentration 2'][data['Concentration 2'].notnull()].unique(),data['Concentration 3'][data['Concentration 3'].notnull()].unique()]))
-        # ourconcs = ['Aerodynamics','Aerospace Systems','Dynamics and Control','Dynamics and Space Mechanics','Propulsion']
-        # inds = (data['Concentration 1'] == ourconcs[0]) | (data['Concentration 2'] == ourconcs[0]) | (data['Concentration 3'] == ourconcs[0])
-        # for j in range(1,len(ourconcs)):
-        #    inds = inds | ((data['Concentration 1'] == ourconcs[j]) | (data['Concentration 2'] == ourconcs[j]) | (data['Concentration 3'] == ourconcs[j]))
-        #
-        # data = data.loc[inds]
-        # data = data.reset_index(drop=True)
 
         # add some new columns
         data["UGrad School"] = None
