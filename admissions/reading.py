@@ -435,12 +435,15 @@ def genRankSurvey(readername, candidates, binsize, surveyBaseName=None, shareWit
     return link
 
 
-def getRankSurveyRes(assignments, outfile):
-    c = cornellQualtrics()
+def getRankSurveyRes(assignments, outfile, surveyBaseName=None, c=None):
+    if c is None:
+        c = cornellQualtrics()
 
     outdict = {}
     for readername in assignments.columns:
         surveyname = "Ranking Survey for {}".format(readername)
+        if surveyBaseName:
+            surveyname = "{} {}".format(surveyBaseName, surveyname)
         surveyId = c.getSurveyId(surveyname)
         tmpdir = c.exportSurvey(surveyId)
         tmpfile = os.path.join(tmpdir, surveyname + ".csv")

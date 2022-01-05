@@ -606,7 +606,7 @@ class utils:
                 "Assigned",
                 "In Progress",
                 "Completed",
-                "Tags",
+#                "Tags",
                 "Field Admission Decision",
                 "Admit Term (requested)",
                 "Admit Term (offered)",

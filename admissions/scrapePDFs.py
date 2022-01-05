@@ -1,5 +1,6 @@
 import io
 import string
+import pdfminer
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import TextConverter
 from pdfminer.pdfpage import PDFPage
@@ -13,7 +14,9 @@ def scrapePDFs(fullnames, profs, facconsulted):
     files = glob.glob("Candidates/*.pdf")
     havefiles = [",".join(os.path.split(f)[1].split("_")[:2]) for f in files]
     needfiles = [re.sub(r"[\s']", "", n) for n in fullnames]
-    assert len(set(needfiles) - set(havefiles)) == 0
+    assert len(set(needfiles) - set(havefiles)) == 0, "Missing files for: {}".format(
+        set(needfiles) - set(havefiles)
+    )
 
     needfiles = np.array(needfiles)
     havefiles = np.array(havefiles)
@@ -24,21 +27,27 @@ def scrapePDFs(fullnames, profs, facconsulted):
 
     out = np.zeros(files.shape, dtype=object)
     badpages = []
+
     trans = str.maketrans(
         string.punctuation + "’\n", " " * (len(string.punctuation) + 2)
     )
-
-    profstrans = np.array([" {} ".format(prof.lower().translate(trans)) for prof in profs])
+    profstrans = np.array(
+        [" {} ".format(prof.lower().translate(trans)) for prof in profs]
+    )
 
     facconsulted = facconsulted.astype(str)
-    facconsulted[facconsulted == 'nan'] = ''
+    facconsulted[facconsulted == "nan"] = ""
+
+    # Perform layout analysis for all text
+    laparams = pdfminer.layout.LAParams()
+    setattr(laparams, "all_texts", True)
 
     for ii, fname in enumerate(files):
         print("%d/%d: %s" % (ii, len(files), fname))
 
         rsrcmgr = PDFResourceManager()
         outfp = io.StringIO("")
-        device = TextConverter(rsrcmgr, outfp)
+        device = TextConverter(rsrcmgr, outfp, laparams=laparams)
 
         with open(fname, "rb") as fp:
             interpreter = PDFPageInterpreter(rsrcmgr, device)
@@ -53,10 +62,10 @@ def scrapePDFs(fullnames, profs, facconsulted):
         txt = outfp.getvalue()
         device.close()
         outfp.close()
-        txt = txt+" "+facconsulted[ii]+" "
+        txt = txt + " " + facconsulted[ii] + " "
 
         tmp = []
-        for jj,prof in enumerate(profstrans):
+        for jj, prof in enumerate(profstrans):
             if prof in txt.lower().translate(trans):
                 tmp.append(profs[jj])
 
