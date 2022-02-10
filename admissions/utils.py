@@ -613,7 +613,7 @@ class utils:
                 "Application Date Submitted",
                 "Application Status",
                 "Applicant Decision",
-                "CollegeNET ID",
+                #"CollegeNET ID",
                 "Admit Program (offered)"
             ],
             errors="ignore",

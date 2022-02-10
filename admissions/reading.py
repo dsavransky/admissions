@@ -440,6 +440,7 @@ def getRankSurveyRes(assignments, outfile, surveyBaseName=None, c=None):
         c = cornellQualtrics()
 
     outdict = {}
+    readersheets = []
     for readername in assignments.columns:
         surveyname = "Ranking Survey for {}".format(readername)
         if surveyBaseName:
@@ -454,6 +455,8 @@ def getRankSurveyRes(assignments, outfile, surveyBaseName=None, c=None):
             continue
 
         allnames = np.array([])
+        readernames = []
+        readerscores = []
         for j in range(5):
             gcolinds = np.array(
                 ["Q1_{}_GROUP".format(j) in c for c in res.columns.get_level_values(0)]
@@ -468,6 +471,8 @@ def getRankSurveyRes(assignments, outfile, surveyBaseName=None, c=None):
                     outdict[n] += ((j + 1) * 10,)
                 else:
                     outdict[n] = ((j + 1) * 10,)
+                readernames.append(n)
+                readerscores.append((j + 1) * 10)
         unranked = np.array(list(set(assignments[readername].values) - set(allnames)))
         unranked = unranked[unranked != "nan"]
         for n in unranked:
@@ -475,6 +480,10 @@ def getRankSurveyRes(assignments, outfile, surveyBaseName=None, c=None):
                 outdict[n] += (100,)
             else:
                 outdict[n] = (100,)
+            readernames.append(n)
+            readerscores.append(100)
+
+        readersheets.append(pandas.DataFrame({"Name":readernames,"Rank":readerscores}))
 
     # build output
     outnames = []
@@ -490,14 +499,16 @@ def getRankSurveyRes(assignments, outfile, surveyBaseName=None, c=None):
     outnames = np.array(outnames)
     out = pandas.DataFrame(
         {
-            "First Name": outnames[:, 0],
-            "Lat Name": outnames[:, 1],
+            "Last Name": outnames[:, 0],
+            "First Name": outnames[:, 1],
             "Rank 1": outrank1,
             "Rank 2": outrank2,
         }
     )
     with pandas.ExcelWriter(outfile) as ew:
         out.to_excel(ew, sheet_name="Ranks", index=False)
+        for j,r in enumerate(readersheets):
+            r.to_excel(ew,sheet_name=assignments.columns[j],index=False)
 
 
 def genRankDragSurvey(surveyname, candidates, shareWith=None):
