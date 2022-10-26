@@ -4,6 +4,54 @@ from cornellGrading import cornellQualtrics
 import os
 
 
+def validateReadingAssignment(out, candidates, nreaders):
+
+    # final consistency check
+    asslist = []
+    for key, val in out.items():
+        assert np.unique(val).size == val.size, "{} has non-unique list.".format(key)
+        asslist = np.hstack((asslist, val))
+
+    assert len(set(asslist) - set(candidates)) == 0, "Not all candidates assigned."
+    for c in candidates:
+        assert (
+            np.where(asslist == c)[0].size == nreaders
+        ), "{} not assigned twice.".format(c)
+
+
+def genReadingAssignmentsHelper(readers, candidates, nreaders):
+
+    # Each person needs to be read by 2 readers
+    nperreader = int(np.round(len(candidates) * nreaders / len(readers)))
+
+    clist = np.hstack((candidates.copy(), candidates.copy()))
+    np.random.shuffle(clist)
+
+    out = {}
+    for reader in readers:
+        tmp = clist[:nperreader]
+        counter = 0
+        while np.unique(tmp).size != tmp.size:
+            counter += 1
+            assert counter < 100, "Initial shuffling failed."
+            np.random.shuffle(clist)
+            tmp = clist[:nperreader]
+        out[reader] = tmp
+        clist = clist[nperreader:]
+
+    # check for unassigned
+    if len(clist) > 0:
+        for c in clist:
+            r = np.random.choice(readers, size=1)[0]
+            while c in out[r]:
+                r = np.random.choice(readers, size=1)[0]
+            out[r] = np.hstack((out[r], c))
+
+    validateReadingAssignment(out, candidates, nreaders)
+
+    return out
+
+
 def genReadingAssignments(infile, outfile, nreaders=2):
     # generate reading assignments
     # infile must be xlsx with two sheets (Readers & Canddiates)
@@ -21,43 +69,19 @@ def genReadingAssignments(infile, outfile, nreaders=2):
         readers = infile[0]
         candidates = infile[1]
 
-    # Each person needs to be read by 2 readers
-    nperreader = int(np.round(len(candidates) * nreaders / len(readers)))
-
     # shuffle candidates and split by readers
-    clist = np.hstack((candidates.copy(), candidates.copy()))
-    np.random.shuffle(clist)
+    # sometimes this process will fail so we just try from
+    # scratch when that happens
+    finished = False
+    while not (finished):
+        try:
+            out = genReadingAssignmentsHelper(readers, candidates, nreaders)
+            finished = True
+        except AssertionError as e:
+            print(e)
 
-    out = {}
-    for reader in readers:
-        tmp = clist[:nperreader]
-        while np.unique(tmp).size != tmp.size:
-            np.random.shuffle(clist)
-            tmp = clist[:nperreader]
-        out[reader] = tmp
-        clist = clist[nperreader:]
-
-    # check for unassigned
-    if len(clist) > 0:
-        for c in clist:
-            r = np.random.choice(readers, size=1)[0]
-            while c in out[r]:
-                r = np.random.choice(readers, size=1)[0]
-            out[r] = np.hstack((out[r], c))
-
-    # final consistency check
-    asslist = []
-    for key, val in out.items():
-        assert np.unique(val).size == val.size, "{} has non-unique list.".format(key)
-        asslist = np.hstack((asslist, val))
-
-    assert np.all(
-        np.unique(asslist) == np.sort(candidates)
-    ), "Not all candidates assigned."
-    for c in candidates:
-        assert (
-            np.where(asslist == c)[0].size == nreaders
-        ), "{} not assigned twice.".format(c)
+    # one final validation for paranoia
+    validateReadingAssignment(out, candidates, nreaders)
 
     # write assignemnts out to disk
     outdf = pandas.DataFrame()
@@ -377,12 +401,12 @@ def genRankSurvey(readername, candidates, binsize, surveyBaseName=None, shareWit
     surveyId = c.createSurvey(surveyname)
 
     desc = (
-        u"This survey is for: {0}.\n\n"
-        u"Rank students into the top 50%-ile bins.  "
-        u"Put exactly {1} students in each bin.  "
-        u"All uncategorized students will automatically "
-        u"be placed in the bottom 50%-ile. Ordering within a bin "
-        u"does not matter.".format(readername, binsize)
+        "This survey is for: {0}.\n\n"
+        "Rank students into the top 50%-ile bins.  "
+        "Put exactly {1} students in each bin.  "
+        "All uncategorized students will automatically "
+        "be placed in the bottom 50%-ile. Ordering within a bin "
+        "does not matter.".format(readername, binsize)
     )
 
     choices = {}
@@ -483,7 +507,9 @@ def getRankSurveyRes(assignments, outfile, surveyBaseName=None, c=None):
             readernames.append(n)
             readerscores.append(100)
 
-        readersheets.append(pandas.DataFrame({"Name":readernames,"Rank":readerscores}))
+        readersheets.append(
+            pandas.DataFrame({"Name": readernames, "Rank": readerscores})
+        )
 
     # build output
     outnames = []
@@ -507,8 +533,8 @@ def getRankSurveyRes(assignments, outfile, surveyBaseName=None, c=None):
     )
     with pandas.ExcelWriter(outfile) as ew:
         out.to_excel(ew, sheet_name="Ranks", index=False)
-        for j,r in enumerate(readersheets):
-            r.to_excel(ew,sheet_name=assignments.columns[j],index=False)
+        for j, r in enumerate(readersheets):
+            r.to_excel(ew, sheet_name=assignments.columns[j], index=False)
 
 
 def genRankDragSurvey(surveyname, candidates, shareWith=None):
