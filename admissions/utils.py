@@ -585,9 +585,7 @@ class utils:
 
                 data.at[row.Index, "Grad_GPA_4pt"] = newgpa
 
-                rank = self.lookup.loc[
-                    self.lookup["Name"] == school, "Rank"
-                ].values[0]
+                rank = self.lookup.loc[self.lookup["Name"] == school, "Rank"].values[0]
                 medgpa = self.rankfit(rank)
                 grgpa = norm.cdf(2 * (newgpa - medgpa))
                 data.at[row.Index, "Grad_Rank"] = rank
@@ -606,18 +604,23 @@ class utils:
                 "Assigned",
                 "In Progress",
                 "Completed",
-#                "Tags",
+                "Tags",
                 "Field Admission Decision",
                 "Admit Term (requested)",
                 "Admit Term (offered)",
                 "Application Date Submitted",
                 "Application Status",
                 "Applicant Decision",
-                #"CollegeNET ID",
-                "Admit Program (offered)"
+                "CollegeNET ID",
+                "Admit Program (offered)",
+                "Decision Layout",
             ],
             errors="ignore",
         )
+
+        # take care of alternate col naming
+        col_rename = {"Legal Last Name": "Last Name", "Legal First Name": "First Name"}
+        data = data.rename(columns=col_rename)
 
         # add some new columns
         data["UGrad School"] = None
