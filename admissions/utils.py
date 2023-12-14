@@ -75,6 +75,14 @@ class utils:
     def __del__(self):
         self.updateFiles()
 
+    def resolve_country(self, cname):
+        country = self.cc.convert(names=cname, to="name_short")
+        overrides = {"Türkiye": "Turkey"}
+        if country in overrides:
+            country = overrides[country]
+
+        return country
+
     def isknownschool(self, name):
         # try main list
         if name in self.lookup["Name"].values:
@@ -357,9 +365,8 @@ class utils:
             for j in range(1, 4):
                 s = row.__getattribute__("School_Name_{}".format(j))
                 if s == s:
-                    country = self.cc.convert(
-                        names=row.__getattribute__("School_Country_{}".format(j)),
-                        to="name_short",
+                    country = self.resolve_country(
+                        row.__getattribute__("School_Country_{}".format(j))
                     )
                     c = row.__getattribute__("School_City_{}".format(j))
                     res = self.matchschool(s, country, city=c)
@@ -490,16 +497,14 @@ class utils:
                 ].values[0]
             )
             s = row.__getattribute__("School_Name_{}".format(j))
-            country = self.cc.convert(
-                names=row.__getattribute__("School_Country_{}".format(j)),
-                to="name_short",
+            country = self.resolve_country(
+                row.__getattribute__("School_Country_{}".format(j))
             )
             school = self.matchschool(s, country)
             gpa = row.__getattribute__("GPA_School_{}".format(j))
             gpascale = row.__getattribute__("GPA_Scale_School_{}".format(j))
-            country = self.cc.convert(
-                names=row.__getattribute__("School_Country_{}".format(j)),
-                to="name_short",
+            country = self.resolve_country(
+                row.__getattribute__("School_Country_{}".format(j))
             )
 
             data.at[row.Index, "UGrad_School"] = school
@@ -548,17 +553,15 @@ class utils:
                 )
 
                 s = row.__getattribute__("School_Name_{}".format(j))
-                country = self.cc.convert(
-                    names=row.__getattribute__("School_Country_{}".format(j)),
-                    to="name_short",
+                country = self.resolve_country(
+                    row.__getattribute__("School_Country_{}".format(j))
                 )
                 school = self.matchschool(s, country)
                 data.at[row.Index, "Grad_School"] = school
                 gpa = row.__getattribute__("GPA_School_{}".format(j))
                 gpascale = row.__getattribute__("GPA_Scale_School_{}".format(j))
-                country = self.cc.convert(
-                    names=row.__getattribute__("School_Country_{}".format(j)),
-                    to="name_short",
+                country = self.resolve_country(
+                    row.__getattribute__("School_Country_{}".format(j))
                 )
 
                 data.at[row.Index, "Grad_GPA"] = gpa
@@ -633,7 +636,6 @@ class utils:
         data["Grad GPA Norm"] = None
         data["UGrad Rank"] = None
         data["Grad Rank"] = None
-        data["URM"] = None
         data["Total"] = None
 
         # remove all column name spaces and special chars
