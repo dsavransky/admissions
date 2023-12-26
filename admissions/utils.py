@@ -614,7 +614,6 @@ class utils:
                 "Application Date Submitted",
                 "Application Status",
                 "Applicant Decision",
-                "CollegeNET ID",
                 "Admit Program (offered)",
                 "Decision Layout",
             ],

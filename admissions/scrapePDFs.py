@@ -4,27 +4,24 @@ import pdfminer
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import TextConverter
 from pdfminer.pdfpage import PDFPage
-import os
 import glob
-import re
 import numpy as np
 
 
-def scrapePDFs(fullnames, profs, facconsulted):
+def scrapePDFs(ids, profs, facconsulted):
+
     # gather PDF files and ensure we have all we need
     files = glob.glob("Candidates/*.pdf")
-    havefiles = [",".join(os.path.split(f)[1].split("_")[:2]) for f in files]
-    needfiles = [re.sub(r"[\s']", "", n) for n in fullnames]
-    assert len(set(needfiles) - set(havefiles)) == 0, "Missing files for: {}".format(
-        set(needfiles) - set(havefiles)
+    havefiles = [int(f.split("_")[-1].split(".")[0]) for f in files]
+
+    assert len(set(ids) - set(havefiles)) == 0, "Missing files for: {}".format(
+        set(ids) - set(havefiles)
     )
 
-    # align files with names
-    needfiles = np.array(needfiles)
-    havefiles = np.array(havefiles)
-    inds = np.array([np.where(havefiles == n)[0][0] for n in needfiles])
+    # align files with ids
+    inds = np.array([np.where(havefiles == n)[0][0] for n in ids])
 
-    havefiles = havefiles[inds]
+    havefiles = np.array(havefiles)[inds]
     files = np.array(files)[inds]
 
     # allocate outputs
@@ -35,8 +32,8 @@ def scrapePDFs(fullnames, profs, facconsulted):
     allprofs = []
     allprofssplit = []
     for p in profs:
-        if (' ' in p) and ('van der' not in p):
-            tmp = p.split(' ')
+        if (" " in p) and ("van der" not in p):
+            tmp = p.split(" ")
             for t in tmp:
                 allprofs.append(p)
                 allprofssplit.append(t)
@@ -71,7 +68,7 @@ def scrapePDFs(fullnames, profs, facconsulted):
             for j, page in enumerate(PDFPage.get_pages(fp, check_extractable=True)):
                 try:
                     interpreter.process_page(page)
-                except:
+                except: # noqa
                     print("Unparsable page encountered.")
                     if fname not in badpages:
                         badpages.append(fname)
