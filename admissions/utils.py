@@ -139,12 +139,12 @@ class utils:
             return res[0]
         else:
             if city:
-                qstr = "I think {} in {}, {} is {}. [accept]/enter alias/[r]ename/[n]ew/[s]kip ".format(
+                qstr = "I think {} in {}, {} is {}. [accept]/enter alias/[r]ename/[n]ew/[s]kip/[q]uit ".format(
                     name, city, country, res[0]
                 )
 
             else:
-                qstr = "I think {} in {} is {}. [accept]/enter alias/[r]ename/[n]ew/[s]kip ".format(
+                qstr = "I think {} in {} is {}. [accept]/enter alias/[r]ename/[n]ew/[s]kip/[q]uit ".format(
                     name, country, res[0]
                 )
 
@@ -173,6 +173,8 @@ class utils:
                 elif instr == "s":
                     self.updateIgnores(name, country)
                     return ("skip",)
+                elif instr == "q":
+                    return ("quit",)
                 else:
                     if instr not in self.lookup["Name"].values:
                         print(
@@ -187,8 +189,12 @@ class utils:
 
     def updateAliases(self, alias, standard_name):
         self.aliasup = True
-        self.aliases = self.aliases.append(
-            pandas.DataFrame({"Alias": [alias], "Standard Name": [standard_name]})
+        self.aliases = pandas.concat(
+            [
+                self.aliases,
+                pandas.DataFrame({"Alias": [alias], "Standard Name": [standard_name]}),
+            ],
+            ignore_index=True,
         )
         self.aliases = self.aliases.sort_values(by=["Standard Name"]).reset_index(
             drop=True
@@ -196,14 +202,21 @@ class utils:
 
     def updateIgnores(self, name, country):
         self.aliasup = True
-        self.ignore = self.ignore.append(
-            pandas.DataFrame({"Name": [name], "Country": [country]})
+        self.ignore = pandas.concat(
+            [self.ignore, pandas.DataFrame({"Name": [name], "Country": [country]})],
+            ignore_index=True,
         ).reset_index(drop=True)
 
     def updateRankings(self, name, rank, country):
         self.rankup = True
-        self.lookup = self.lookup.append(
-            pandas.DataFrame({"Name": [name], "Rank": [rank], "Country": [country]})
+        self.lookup = pandas.concat(
+            [
+                self.lookup,
+                pandas.DataFrame(
+                    {"Name": [name], "Rank": [rank], "Country": [country]}
+                ),
+            ],
+            ignore_index=True,
         )
         self.lookup = self.lookup.sort_values(by=["Rank"]).reset_index(drop=True)
 
@@ -293,19 +306,22 @@ class utils:
                 xgpa = np.hstack([xgpa, 0])
                 ygpa = np.hstack([ygpa, 0])
 
-            self.grades = self.grades.append(
-                pandas.DataFrame(
-                    {
-                        "Name": [newname],
-                        "Country": [country],
-                        "GPAScale": [gpascale],
-                        "SchoolGPA": [xgpastr],
-                        "4ptGPA": [ygpastr],
-                        "Interp": [
-                            scipy.interpolate.interp1d(xgpa, ygpa, kind="linear")
-                        ],
-                    }
-                ),
+            self.grades = pandas.concat(
+                [
+                    self.grades,
+                    pandas.DataFrame(
+                        {
+                            "Name": [newname],
+                            "Country": [country],
+                            "GPAScale": [gpascale],
+                            "SchoolGPA": [xgpastr],
+                            "4ptGPA": [ygpastr],
+                            "Interp": [
+                                scipy.interpolate.interp1d(xgpa, ygpa, kind="linear")
+                            ],
+                        }
+                    ),
+                ],
                 ignore_index=True,
             )
             self.gradeup = True
@@ -374,15 +390,20 @@ class utils:
                     if isinstance(res, tuple):
                         if res[0] == "skip":
                             continue
+                        elif res[0] == "quit":
+                            return
                         elif res[0] == "rename":
-                            self.renames = self.renames.append(
-                                pandas.DataFrame(
-                                    {
-                                        "Full_Name": [fullname],
-                                        "Field": ["School_Name_{}".format(j)],
-                                        "Value": [res[1]],
-                                    }
-                                ),
+                            self.renames = pandas.concat(
+                                [
+                                    self.renames,
+                                    pandas.DataFrame(
+                                        {
+                                            "Full_Name": [fullname],
+                                            "Field": ["School_Name_{}".format(j)],
+                                            "Value": [res[1]],
+                                        }
+                                    ),
+                                ],
                                 ignore_index=True,
                             )
                             self.utilup = True
@@ -461,26 +482,32 @@ class utils:
                     hasgr = True
 
             if hasgr:
-                self.schoolmatches = self.schoolmatches.append(
-                    pandas.DataFrame(
-                        {
-                            "Full_Name": [fullname],
-                            "UG_School": [snums[ug]],
-                            "GR_School": [snums[gr]],
-                        }
-                    ),
+                self.schoolmatches = pandas.concat(
+                    [
+                        self.schoolmatches,
+                        pandas.DataFrame(
+                            {
+                                "Full_Name": [fullname],
+                                "UG_School": [snums[ug]],
+                                "GR_School": [snums[gr]],
+                            }
+                        ),
+                    ],
                     ignore_index=True,
                 )
                 self.utilup = True
             else:
-                self.schoolmatches = self.schoolmatches.append(
-                    pandas.DataFrame(
-                        {
-                            "Full_Name": [fullname],
-                            "UG_School": [snums[ug]],
-                            "GR_School": [np.nan],
-                        }
-                    ),
+                self.schoolmatches = pandas.concat(
+                    [
+                        self.schoolmatches,
+                        pandas.DataFrame(
+                            {
+                                "Full_Name": [fullname],
+                                "UG_School": [snums[ug]],
+                                "GR_School": [np.nan],
+                            }
+                        ),
+                    ],
                     ignore_index=True,
                 )
                 self.utilup = True
@@ -514,17 +541,20 @@ class utils:
             if newgpa is None:
                 newgpa = input("GPA: ")
                 newgpascale = input("GPA Scale: ")
-                self.renames = self.renames.append(
-                    pandas.DataFrame(
-                        {
-                            "Full_Name": [fullname, fullname],
-                            "Field": [
-                                "GPA_School_{}".format(j),
-                                "GPA_Scale_School_{}".format(j),
-                            ],
-                            "Value": [float(newgpa), float(newgpascale)],
-                        }
-                    ),
+                self.renames = pandas.concat(
+                    [
+                        self.renames,
+                        pandas.DataFrame(
+                            {
+                                "Full_Name": [fullname, fullname],
+                                "Field": [
+                                    "GPA_School_{}".format(j),
+                                    "GPA_Scale_School_{}".format(j),
+                                ],
+                                "Value": [float(newgpa), float(newgpascale)],
+                            }
+                        ),
+                    ],
                     ignore_index=True,
                 )
                 self.utilup = True
@@ -570,17 +600,20 @@ class utils:
                 if newgpa is None:
                     newgpa = input("GPA: ")
                     newgpascale = input("GPA Scale: ")
-                    self.renames = self.renames.append(
-                        pandas.DataFrame(
-                            {
-                                "Full_Name": [fullname, fullname],
-                                "Field": [
-                                    "GPA_School_{}".format(j),
-                                    "GPA_Scale_School_{}".format(j),
-                                ],
-                                "Value": [float(newgpa), float(newgpascale)],
-                            }
-                        ),
+                    self.renames = pandas.concat(
+                        [
+                            self.renames,
+                            pandas.DataFrame(
+                                {
+                                    "Full_Name": [fullname, fullname],
+                                    "Field": [
+                                        "GPA_School_{}".format(j),
+                                        "GPA_Scale_School_{}".format(j),
+                                    ],
+                                    "Value": [float(newgpa), float(newgpascale)],
+                                }
+                            ),
+                        ],
                         ignore_index=True,
                     )
                     self.utilup = True
